@@ -1,73 +1,33 @@
-import sys
-import traceback
-
-print("=== STARTING CRYPTO ARBITRAGE BOT ===", flush=True)
-sys.stdout.flush()
-
-try:
-    import asyncio
-    import logging
-    print("Imported asyncio and logging", flush=True)
-except Exception as e:
-    print(f"FATAL ERROR importing asyncio/logging: {e}", flush=True)
-    traceback.print_exc()
-    sys.exit(1)
-
+import asyncio
+import logging
 from datetime import datetime
 from typing import List
-print("Imported datetime and typing", flush=True)
-
 from src.config import settings
-
-print(f"Loaded config: {settings.environment}", flush=True)
-
 from src.exchanges.binance import BinanceExchange
 from src.exchanges.bybit import BybitExchange
 from src.exchanges.gateio import GateioExchange
 from src.exchanges.kraken import KrakenExchange
 from src.exchanges.base import BaseExchange, Ticker
-
-print("Imported exchanges", flush=True)
-
 from src.arbitrage.analyzer import ArbitrageAnalyzer
 from src.arbitrage.executor import ArbitrageExecutor
-
-print("Imported arbitrage modules", flush=True)
-
 from src.ai.openai_service import OpenAIAnalyzer
-
-print("Imported AI service", flush=True)
-
 from src.azure.keyvault import KeyVaultManager
 from src.azure.storage import StorageManager
-print("Imported Azure keyvault and storage", flush=True)
 
 try:
     from src.azure.sql import SQLManager
 except ImportError:
     SQLManager = None
-    print("SQL Manager not available", flush=True)
 
 from src.azure.datalake import DataLakeManager
-
-print("Imported DataLake manager", flush=True)
-
-from src.monitoring.telemetry import (
-    init_telemetry,
-    track_event,
-    track_metric,
-    create_span,
-)
+from src.monitoring.telemetry import init_telemetry, track_event, track_metric, create_span
 from src.monitoring.metrics import MetricsCollector
-
-print("Imported monitoring modules", flush=True)
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
-print("Logger initialized", flush=True)
 
 
 class ArbitrageBot:
@@ -314,10 +274,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    try:
-        print("=== RUNNING MAIN FUNCTION ===", flush=True)
-        asyncio.run(main())
-    except Exception as e:
-        print(f"\n\nFATAL ERROR in main: {e}", flush=True)
-        traceback.print_exc()
-        sys.exit(1)
+    asyncio.run(main())
