@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: crypto-arbitrage-bot-service
+  namespace: crypto-arbitrage
+  labels:
+    app: crypto-arbitrage-bot
+spec:
+  selector:
+    app: crypto-arbitrage-bot
+  ports:
+  - name: metrics
+    protocol: TCP
+    port: 8000
+    targetPort: 8000
+  type: ClusterIP
+

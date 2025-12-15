@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crypto-arbitrage-bot
+  namespace: crypto-arbitrage
+  labels:
+    app: crypto-arbitrage-bot
+    version: v1
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: crypto-arbitrage-bot
+  template:
+    metadata:
+      labels:
+        app: crypto-arbitrage-bot
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: crypto-arbitrage-sa
+      containers:
+      - name: arbitrage-bot
+        image: acrcryptoarb.azurecr.io/crypto-arbitrage-bot:latest
+        imagePullPolicy: Always
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        env:
+        - name: AZURE_KEY_VAULT_URL
+          valueFrom:
+            secretKeyRef:
+              name: azure-secrets
+              key: key-vault-url
+        - name: AZURE_STORAGE_CONNECTION_STRING
+          valueFrom:
+            secretKeyRef:
+              name: azure-secrets
+              key: storage-connection-string
+        - name: AZURE_APPLICATION_INSIGHTS_CONNECTION_STRING
+          valueFrom:
+            secretKeyRef:
+              name: azure-secrets
+              key: app-insights-connection-string
+        - name: AZURE_SQL_CONNECTION_STRING
+          valueFrom:
+            secretKeyRef:
+              name: azure-secrets
+              key: sql-connection-string
+        - name: AZURE_DATALAKE_ACCOUNT_NAME
+          valueFrom:
+            secretKeyRef:
+              name: azure-secrets
+              key: datalake-account-name
+        envFrom:
+        - configMapRef:
+            name: arbitrage-config
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import sys; sys.exit(0)"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import sys; sys.exit(0)"
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+      imagePullSecrets:
+      - name: acr-secret
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: crypto-arbitrage-sa
+  namespace: crypto-arbitrage
+  annotations:
+    azure.workload.identity/client-id: "YOUR_MANAGED_IDENTITY_CLIENT_ID"

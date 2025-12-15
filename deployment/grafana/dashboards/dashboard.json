@@ -1,0 +1,52 @@
+{
+  "dashboard": {
+    "title": "Crypto Arbitrage Monitoring",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Arbitrage Opportunities Found",
+        "type": "graph",
+        "targets": [
+          {
+            "refId": "A",
+            "query": "arbitrage_events"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Profit Distribution",
+        "type": "graph",
+        "targets": [
+          {
+            "refId": "B",
+            "query": "arbitrage_metrics"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Exchange Performance",
+        "type": "table",
+        "targets": [
+          {
+            "refId": "C",
+            "query": "ticker_price"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "System Health",
+        "type": "stat",
+        "targets": [
+          {
+            "refId": "D",
+            "query": "up"
+          }
+        ]
+      }
+    ]
+  }
+}
+

@@ -1,0 +1,135 @@
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+variables:
+  azureSubscription: 'Azure-Service-Connection'
+  resourceGroup: 'crypto-arbitrage-rg'
+  containerRegistry: 'cryptoacr8899'
+  imageName: 'crypto-arbitrage'
+  containerInstance: 'crypto-app'
+  location: 'northeurope'
+
+stages:
+  - stage: Build
+    displayName: 'Build and Test'
+    jobs:
+      - job: BuildJob
+        displayName: 'Build Docker Image'
+        pool:
+          vmImage: 'ubuntu-latest'
+        
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.11'
+            displayName: 'Use Python 3.11'
+          
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+              pip install pytest pytest-cov black
+            displayName: 'Install dependencies'
+          
+          - script: |
+              black --check src/
+            displayName: 'Code formatting check'
+          
+          - script: |
+              pytest tests/ --cov=src --cov-report=html --cov-report=xml
+            displayName: 'Run tests'
+          
+          - task: PublishCodeCoverageResults@1
+            inputs:
+              codeCoverageTool: 'Cobertura'
+              summaryFileLocation: '$(System.DefaultWorkingDirectory)/coverage.xml'
+            displayName: 'Publish code coverage'
+          
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: $(azureSubscription)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az acr build \
+                  --registry $(containerRegistry) \
+                  --image $(imageName):$(Build.BuildId) \
+                  --image $(imageName):latest \
+                  --file Dockerfile \
+                  .
+            displayName: 'Build and push Docker image'
+
+  - stage: Deploy
+    displayName: 'Deploy to Azure'
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployJob
+        displayName: 'Deploy to Container Instance'
+        pool:
+          vmImage: 'ubuntu-latest'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  inputs:
+                    azureSubscription: $(azureSubscription)
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      echo "Deleting old container..."
+                      az container delete \
+                        --resource-group $(resourceGroup) \
+                        --name $(containerInstance) \
+                        --yes || true
+                      
+                      echo "Getting credentials..."
+                      ACR_USER=$(az acr credential show --name $(containerRegistry) --query username -o tsv)
+                      ACR_PASS=$(az acr credential show --name $(containerRegistry) --query "passwords[0].value" -o tsv)
+                      STORAGE_CONN=$(az storage account show-connection-string --resource-group $(resourceGroup) --name cryptostor8899 --query connectionString -o tsv)
+                      APPINSIGHTS_CONN=$(az monitor app-insights component show --app cryptoinsights --resource-group $(resourceGroup) --query connectionString -o tsv)
+                      
+                      echo "Creating new container..."
+                      az container create \
+                        --resource-group $(resourceGroup) \
+                        --name $(containerInstance) \
+                        --image $(containerRegistry).azurecr.io/$(imageName):$(Build.BuildId) \
+                        --cpu 2 \
+                        --memory 4 \
+                        --os-type Linux \
+                        --registry-login-server $(containerRegistry).azurecr.io \
+                        --registry-username $ACR_USER \
+                        --registry-password $ACR_PASS \
+                        --location $(location) \
+                        --environment-variables \
+                          AZURE_KEY_VAULT_URL=https://cryptokv8899.vault.azure.net/ \
+                          AZURE_STORAGE_CONNECTION_STRING="$STORAGE_CONN" \
+                          AZURE_APPLICATION_INSIGHTS_CONNECTION_STRING="$APPINSIGHTS_CONN" \
+                          AZURE_DATALAKE_ACCOUNT_NAME=cryptostor8899 \
+                          ENVIRONMENT=production \
+                          LOG_LEVEL=INFO \
+                        --restart-policy Always \
+                        --assign-identity
+                      
+                      echo "Granting Key Vault access..."
+                      CONTAINER_IDENTITY=$(az container show --resource-group $(resourceGroup) --name $(containerInstance) --query identity.principalId -o tsv)
+                      az keyvault set-policy --name cryptokv8899 --object-id $CONTAINER_IDENTITY --secret-permissions get list
+                      
+                      echo "Deployment completed!"
+                  displayName: 'Deploy to Azure Container Instance'
+                
+                - task: AzureCLI@2
+                  inputs:
+                    azureSubscription: $(azureSubscription)
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      echo "Waiting for container to start..."
+                      sleep 30
+                      echo "Fetching logs..."
+                      az container logs --resource-group $(resourceGroup) --name $(containerInstance)
+                  displayName: 'Show container logs'

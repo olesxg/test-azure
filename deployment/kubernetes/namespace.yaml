@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: crypto-arbitrage
+  labels:
+    name: crypto-arbitrage
+    environment: production
+
